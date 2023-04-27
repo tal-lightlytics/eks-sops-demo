@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sops-demo.fullname" . }}-cm
+  labels:
+    {{- include "sops-demo.labels" . | nindent 4 }}
+data:
+{{- range $key, $val := .Values.environment }}
+  {{ $key }}: {{ tpl $val $ | quote }}
+{{- end }}

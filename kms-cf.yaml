@@ -1,0 +1,269 @@
+#
+#  _  ____  __ ____
+# | |/ /  \/  / ___|
+# | ' /| |\/| \___ \
+# | . \| |  | |___) |
+# |_|\_\_|  |_|____/
+#
+#
+################################################################
+# KMS Key for Your-Service
+# StackID: < Your CF stack ID >
+# Repository: < Your Repository Name>
+################################################################
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Security: KMS customer managed key(CMK) for your Environment'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Parent Stacks'
+      Parameters:
+      - ParentAlertStack
+    - Label:
+        default: 'KMS Parameters'
+      Parameters:
+      - AWSServices
+      - KeySpec
+      - KeyUsage
+    - Label:
+        default: 'Tagging Configuration'
+      Parameters:
+      - Country
+      - Department
+      - Environment
+      - Project
+      - Service
+Parameters:
+  ParentAlertStack:
+    Description: 'Optional but recommended stack name of parent alert stack based on operations/alert.yaml template.'
+    Type: String
+    Default: ''
+  AWSServices:
+    Description: 'Which AWS service is allowed to use by this CMK?'
+    Type: String
+    AllowedValues:
+    - 'ALL_SERVICES'
+    - 'S3_PUBLIC_ACCESS'
+    - connect
+    - dms
+    - ssm
+    - ec2
+    - elasticfilesystem
+    - es
+    - kinesis
+    - kinesisvideo
+    - lambda
+    - lex
+    - redshift
+    - rds
+    - secretsmanager
+    - ses
+    - s3
+    - importexport
+    - sqs
+    - workmail
+    - workspaces
+    - dnssec-route53
+    Default: ALL_SERVICES
+  KeySpec:
+    Description: 'Specify the type of the CMK'
+    Type: String
+    AllowedValues:
+    - SYMMETRIC_DEFAULT
+    - RSA_2048
+    - RSA_3072
+    - RSA_4096
+    - ECC_NIST_P256
+    - ECC_NIST_P384
+    - ECC_NIST_P521
+    - ECC_SECG_P256K1
+    Default: SYMMETRIC_DEFAULT
+  KeyUsage:
+    Description: 'Which cryptographic operations should the CMK support?'
+    Type: String
+    AllowedValues:
+    - ENCRYPT_DECRYPT
+    - SIGN_VERIFY
+    Default: ENCRYPT_DECRYPT
+  Country:
+    Description: 'Which country tag to apply to the service?'
+    Type: String
+    AllowedValues:
+      - Australia
+      - USA
+      - India
+      - China
+    Default: Australia
+  Department:
+    Description: 'Which department tag to apply to the service?'
+    Type: String
+    AllowedValues:
+      - InformationTechnology
+      - General-Department
+      - Finance
+      - Marketing
+      - Operations
+    Default: InformationTechnology
+  Environment:
+    Description: 'A Tag to differenciate the environment'
+    Type: String
+    AllowedValues:
+      - Testing
+      - Development
+      - Staging
+      - Production
+    Default: Production 
+  Project:
+    Description: 'The name of the project on this resource' 
+    Type: String
+    Default: Project-Name
+  Service:
+    Description: 'The name of the service on this resource'
+    Type: String
+    Default: Service1
+Conditions:
+  HasAlertTopic: !Not [!Equals [!Ref ParentAlertStack, '']]
+  HasServiceAllServices: !Equals [!Ref AWSServices, 'ALL_SERVICES']
+  HasServiceS3PublicAccess: !Equals [!Ref AWSServices, 'S3_PUBLIC_ACCESS']
+Resources:
+  Key:
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Enabled: true
+      EnableKeyRotation: true
+      KeySpec: !Ref KeySpec
+      KeyUsage: !Ref KeyUsage
+      MultiRegion: false
+      PendingWindowInDays: 7
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: 'Enable IAM User Permissions'
+          Effect: Allow
+          Principal:
+            AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+          Action: 'kms:*'
+          Resource: '*'
+        - Sid: 'Allow access for key Administrators'
+          Effect: Allow
+          Principal:
+            AWS: 
+            # replace with your AWS IAM user or role
+            - arn:aws:iam::XXXXXXXXXXXX:user/talos
+          Action:
+          - kms:Create*
+          - kms:Describe*
+          - kms:Enable*
+          - kms:List*
+          - kms:Put*
+          - kms:Update*
+          - kms:Revoke*
+          - kms:Disable*
+          - kms:Get*
+          - kms:Delete*
+          - kms:ScheduleKeyDeletion
+          - kms:CancelKeyDeletion
+          Resource: '*'
+        - Sid: 'Allow use of the key'
+          Effect: Allow
+          Principal:
+            AWS: 
+            # replace with your AWS IAM user or role
+            - arn:aws:iam::XXXXXXXXXXXX:user/talos
+            - arn:aws:iam::XXXXXXXXXXXX:user/developer
+          Action:
+          - kms:DescribeKey
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyWithoutPlaintext
+          Resource: '*'
+          Condition:
+            StringEquals: !If
+              - HasServiceAllServices
+              - 'kms:CallerAccount': !Ref 'AWS::AccountId'
+              - 'kms:CallerAccount': !Ref 'AWS::AccountId'
+                'kms:ViaService': !Sub '${AWSServices}.${AWS::Region}.amazonaws.com'
+        - !If
+          - HasServiceS3PublicAccess
+          - Sid: 'Allow use of the key'
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'kms:Decrypt'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'kms:ViaService': !Sub 's3.${AWS::Region}.amazonaws.com'
+          - !Ref 'AWS::NoValue'
+      Tags:
+      - Key: Country
+        Value: !Ref Country
+      - Key: Department
+        Value: !Ref Department
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: Project
+        Value: !Ref Project 
+      - Key: Service
+        Value: !Ref Service  
+      - Key: KeySpec
+        Value: !Ref KeySpec 
+      - Key: KeyUsage
+        Value: !Ref KeyUsage
+      - Key: StackID
+        Value: !Sub '${AWS::StackId}'
+      - Key: StackName
+        Value: !Sub '${AWS::StackName}'  
+  KeyAlias:
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Type: 'AWS::KMS::Alias'
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}'
+      TargetKeyId: !Ref Key
+  DeletionNotification:
+    Condition: HasAlertTopic
+    Type: 'AWS::Events::Rule'
+    Properties:
+      EventPattern:
+        source:
+        - 'aws.kms'
+        'detail-type':
+        - 'AWS API Call via CloudTrail'
+        resources:
+        - !GetAtt Key.Arn
+        detail:
+          eventSource:
+          - 'kms.amazonaws.com'
+          'eventName':
+          - ScheduleKeyDeletion
+          - DisableKey
+      State: ENABLED
+      Targets:
+      - Arn: {'Fn::ImportValue': !Sub '${ParentAlertStack}-TopicARN'}
+        Id: rule
+Outputs:
+  KeyId:
+    Description: 'Key ID'
+    Value: !Ref Key
+    Export:
+      Name: !Sub '${AWS::StackName}-KeyId'
+  KeyArn:
+    Description: 'Key ARN'
+    Value: !GetAtt Key.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-KeyArn'
+  StackId:
+    Description: 'Stack ID'
+    Value: !Sub '${AWS::StackId}'
+  StackName:
+    Description: 'Stack Name With Environment Type'
+    Value: !Sub '${AWS::StackName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-${Environment}'
