@@ -1,0 +1,9 @@
+creation_rules:
+  - path_regex: .*/development/*
+    kms: "arn:aws:kms:us-east-1:xxxxxxxxxxxx:alias/lightlytics-kms-demo"
+  - path_regex: .*/staging/*
+    kms: "arn:aws:kms:us-east-1:xxxxxxxxxxxx:alias/lightlytics-kms-staging"  
+  - path_regex: .*/preproduction/*
+    kms: "arn:aws:kms:us-east-1:xxxxxxxxxxxx:alias/lightlytics-kms-preproduction"  
+  - path_regex: .*/production/*
+    kms: "arn:aws:kms:us-east-1:xxxxxxxxxxxx:alias/lightlytics-kms-production"  
